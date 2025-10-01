@@ -394,8 +394,10 @@ def test_standalone():
 
 if __name__ == "__main__":
     import sys
+    import os
     
-    if len(sys.argv) > 1 and sys.argv[1] == "api":
+    # Check if running in production (Railway sets PORT environment variable)
+    if os.getenv("PORT") or (len(sys.argv) > 1 and sys.argv[1] == "api"):
         print("\n" + "="*80)
         print("🚀 Starting FRED Economic Data Agent API Server")
         print("="*80)
@@ -406,6 +408,8 @@ if __name__ == "__main__":
         print("   • Availability: http://localhost:8000/availability")
         print("\n" + "="*80 + "\n")
         
-        uvicorn.run(app, host="0.0.0.0", port=8000)
+        # Use PORT from environment if available (Railway), otherwise default to 8000
+        port = int(os.getenv("PORT", 8000))
+        uvicorn.run(app, host="0.0.0.0", port=port)
     else:
         test_standalone()
