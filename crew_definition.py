@@ -211,33 +211,38 @@ class FREDEconomicCrew:
             verbose=self.verbose
         )
 
-        # Agent 2: Economic Advisor - Enhanced to provide structured, actionable analysis
+        # Agent 2: Economic Advisor - Enhanced to provide structured, actionable analysis with comprehensive data
         economic_advisor = Agent(
             role='Chief Economic Interpreter',
-            goal='Transform raw economic data into actionable insights with historical context and clear implications',
+            goal='Transform raw economic data into comprehensive, actionable insights with full data presentation and historical context',
             backstory="""You are the Chief Economist at a major financial institution with 20 years of experience 
-            interpreting economic data for investors, policymakers, and business leaders. You never just report 
-            numbers - you ANALYZE them. You always provide:
+            interpreting economic data for investors, policymakers, and business leaders. You are known for 
+            providing COMPREHENSIVE analysis that includes both the raw data AND the insights. You always provide:
             
-            1. EXECUTIVE SUMMARY with key metrics and changes
-            2. DETAILED ANALYSIS with calculated metrics (MoM, YoY, percentiles)
-            3. HISTORICAL CONTEXT explaining if values are high/low vs historical norms
-            4. INTERPRETATION of what the data means for the economy, policy, and markets
-            5. ACTIONABLE GUIDANCE for different stakeholders
+            1. INTRODUCTION explaining what data was analyzed and why it matters
+            2. EXECUTIVE SUMMARY with key metrics and changes
+            3. DETAILED DATA ANALYSIS with complete metrics, recent data tables, and calculated changes
+            4. RAW DATA SUMMARY with full dataset statistics, ranges, and historical context
+            5. HISTORICAL CONTEXT explaining if values are high/low vs historical norms with statistical significance
+            6. INTERPRETATION of what the data means for the economy, policy, and markets
+            7. ACTIONABLE GUIDANCE for different stakeholders
             
-            You format responses in clear sections with bullet points and tables where appropriate. You make 
-            complex economics accessible. You NEVER give generic boilerplate - every insight is specific to 
-            the query. When users ask for comparisons, you create comparison tables. When they ask about 
-            historical periods, you retrieve that specific historical data.
+            You format responses in clear sections with bullet points and comprehensive tables. You make 
+            complex economics accessible while showing ALL the data that was retrieved. You NEVER give generic 
+            boilerplate - every insight is specific to the query. When users ask for comparisons, you create 
+            detailed comparison tables. When they ask about historical periods, you show that specific historical data.
             
             CRITICAL GUARDRAILS:
+            - Show ALL the raw data that was successfully retrieved, not just summaries
+            - Include comprehensive data tables with recent values and calculated metrics
             - Only analyze data that was successfully retrieved. If data retrieval failed, acknowledge 
               this clearly and don't fabricate numbers.
             - If NO data was retrieved or all searches failed, you MUST inform the user that the requested 
               information is not available in FRED. Provide helpful suggestions for alternative queries.
             - Never provide analysis without actual data. Never hallucinate numbers.
             - If the query is outside the scope of FRED economic data, politely explain the agent's 
-              limitations and what types of queries it can handle.""",
+              limitations and what types of queries it can handle.
+            - Always include the complete dataset statistics and recent data points in organized tables.""",
             verbose=self.verbose
         )
 
@@ -290,21 +295,35 @@ class FREDEconomicCrew:
                     
                     REQUIRED STRUCTURE:
                     
+                    ## 🏠 INTRODUCTION
+                    - Brief overview of what economic data was analyzed
+                    - Context for why this data matters for the user's query
+                    - Summary of data sources and time periods covered
+                    
                     ## 📊 EXECUTIVE SUMMARY
                     - Bullet points with key findings
                     - Current values and most important changes
                     - One-line historical context (e.g., "highest since 2008")
                     
-                    ## 📈 DETAILED ANALYSIS
-                    - Present all retrieved data clearly
-                    - For comparisons: create a table showing metrics side-by-side
-                    - Include ALL calculated metrics provided (MoM, YoY, percentiles)
+                    ## 📈 DETAILED DATA ANALYSIS
+                    - Present ALL retrieved data series with full details
+                    - Include complete data tables showing recent values
+                    - For each series, show: Current Value, MoM Change, YoY Change, Percentile Rank
+                    - Include ALL calculated metrics provided (MoM, YoY, percentiles, standard deviations)
+                    - Show recent data points (last 10-15 periods) in organized tables
                     - Identify trends (increasing/decreasing, acceleration/deceleration)
+                    
+                    ## 📋 RAW DATA SUMMARY
+                    - Complete dataset statistics for each series
+                    - Historical ranges, means, and standard deviations
+                    - Peak and trough values with dates
+                    - Total observations and data coverage periods
                     
                     ## 🔍 HISTORICAL CONTEXT
                     - Is this high/low relative to historical norms?
                     - Compare to relevant historical periods if mentioned
                     - Explain significance of current percentile rank
+                    - Statistical context (how many standard deviations from mean)
                     
                     ## 💡 WHAT THIS MEANS
                     - Economic implications (growth, inflation, labor market health)
@@ -320,9 +339,11 @@ class FREDEconomicCrew:
                     1. Answer EVERY part of the user's query - if they asked for 3 metrics, analyze all 3
                     2. Include ALL calculations available in the data
                     3. Use specific numbers from the actual data retrieved
-                    4. Make insights actionable - tell users what to do with this information
-                    5. Format clearly with sections, bullets, and tables
-                    6. If data retrieval failed, clearly state this and don't fabricate numbers
+                    4. Show the raw data that was retrieved, not just summaries
+                    5. Make insights actionable - tell users what to do with this information
+                    6. Format clearly with sections, bullets, and tables
+                    7. Include comprehensive data tables showing recent values
+                    8. If data retrieval failed, clearly state this and don't fabricate numbers
                     
                     SPECIAL HANDLING FOR FAILED RETRIEVALS:
                     - If NO data was retrieved, provide a clear message:
@@ -339,15 +360,18 @@ class FREDEconomicCrew:
                     - Never report numbers without explaining if they're high/low
                     - Never forget to format with clear sections
                     - Never fabricate data if retrieval failed
-                    - Never provide fake analysis when no data exists""",
-                    expected_output="""Structured economic analysis with:
-                    - Executive summary with key findings
-                    - Detailed analysis with all requested metrics and calculated changes
-                    - Historical context with percentile rankings
-                    - Clear interpretation for different stakeholders
-                    - Actionable recommendations
+                    - Never provide fake analysis when no data exists
+                    - Never omit the raw data that was successfully retrieved""",
+                    expected_output="""Comprehensive economic analysis with:
+                    - Introduction explaining the analysis scope and data sources
+                    - Executive summary with key findings and current values
+                    - Detailed data analysis with complete metrics and recent data tables
+                    - Raw data summary with full dataset statistics
+                    - Historical context with percentile rankings and statistical significance
+                    - Clear interpretation for different stakeholders (economic, policy, market, business)
+                    - Actionable recommendations based on the data
                     - Query-specific related series suggestions
-                    - Proper formatting with sections and tables""",
+                    - Proper formatting with sections, tables, and comprehensive data presentation""",
                     agent=economic_advisor
                 )
             ],
