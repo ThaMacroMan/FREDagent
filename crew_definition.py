@@ -1,4 +1,5 @@
 from crewai import Agent, Crew, Task
+from crewai import LLM
 from testing.logging_config import get_logger
 from crewai.tools import tool
 from fredapi import Fred
@@ -180,9 +181,17 @@ class FREDEconomicCrew:
     A specialized CrewAI crew for querying and analyzing FRED economic data.
     Enhanced with analytical capabilities for comprehensive economic analysis.
     """
-    def __init__(self, verbose=True, logger=None):
+    def __init__(self, verbose=True, logger=None, model=None, temperature=None):
         self.verbose = verbose
         self.logger = logger or get_logger(__name__)
+        # Configure LLM - support custom model and temperature, default to gpt-5-nano
+        if model:
+            llm_params = {"model": model}
+            if temperature is not None:
+                llm_params["temperature"] = temperature
+            self.llm = LLM(**llm_params)
+        else:
+            self.llm = LLM(model="gpt-5-nano")
         self.crew = self.create_crew()
         self.logger.info("FRED Economic Crew initialized")
 
@@ -201,6 +210,8 @@ class FREDEconomicCrew:
             tool to get actual numbers with calculated metrics, never just search results.
             
             CRITICAL GUARDRAILS:
+            - ALWAYS call tools with single string parameters. Example: fred_search_tool("unemployment rate") NOT fred_search_tool(["query": "unemployment rate"])
+            - NEVER pass JSON arrays or multiple parameters to tools - use single string arguments only
             - If a tool fails 2-3 times, try a different series ID or inform the user about the issue.
             - If FRED search returns NO results or empty data, you MUST immediately inform the user that 
               the requested data is not available in FRED. DO NOT make up data or provide generic responses.
@@ -208,6 +219,7 @@ class FREDEconomicCrew:
               (e.g., weather, recipes, entertainment), politely inform the user this is outside your scope.
             - Never hallucinate data. If you cannot retrieve actual data, say so explicitly.""",
             tools=[fred_search_tool, fred_data_tool, fred_series_info_tool],
+            llm=self.llm,
             verbose=self.verbose
         )
 
@@ -219,13 +231,13 @@ class FREDEconomicCrew:
             interpreting economic data for investors, policymakers, and business leaders. You are known for 
             providing COMPREHENSIVE analysis that includes both the raw data AND the insights. You always provide:
             
-            1. INTRODUCTION explaining what data was analyzed and why it matters
+            1. INTRODUCTION with the user's original request and what data was analyzed
             2. EXECUTIVE SUMMARY with key metrics and changes
             3. DETAILED DATA ANALYSIS with complete metrics, recent data tables, and calculated changes
-            4. RAW DATA SUMMARY with full dataset statistics, ranges, and historical context
-            5. HISTORICAL CONTEXT explaining if values are high/low vs historical norms with statistical significance
-            6. INTERPRETATION of what the data means for the economy, policy, and markets
-            7. ACTIONABLE GUIDANCE for different stakeholders
+            4. HISTORICAL CONTEXT explaining if values are high/low vs historical norms with statistical significance
+            5. INTERPRETATION of what the data means for the economy, policy, and markets
+            6. ACTIONABLE GUIDANCE for different stakeholders
+            7. FURTHER EXPLORATION links to related FRED series
             
             You format responses in clear sections with bullet points and comprehensive tables. You make 
             complex economics accessible while showing ALL the data that was retrieved. You NEVER give generic 
@@ -233,8 +245,9 @@ class FREDEconomicCrew:
             detailed comparison tables. When they ask about historical periods, you show that specific historical data.
             
             CRITICAL GUARDRAILS:
+            - ALWAYS provide a final, complete answer. NEVER ask follow-up questions or leave the analysis incomplete.
             - Show ALL the raw data that was successfully retrieved, not just summaries
-            - Include comprehensive data tables with recent values and calculated metrics
+            - Exclude N/A values from output - only show calculated metrics that have real data
             - Only analyze data that was successfully retrieved. If data retrieval failed, acknowledge 
               this clearly and don't fabricate numbers.
             - If NO data was retrieved or all searches failed, you MUST inform the user that the requested 
@@ -242,7 +255,9 @@ class FREDEconomicCrew:
             - Never provide analysis without actual data. Never hallucinate numbers.
             - If the query is outside the scope of FRED economic data, politely explain the agent's 
               limitations and what types of queries it can handle.
-            - Always include the complete dataset statistics and recent data points in organized tables.""",
+            - Always include the complete dataset statistics and recent data points in organized tables.
+            - Make your best interpretation of the data and provide a complete analysis - don't ask if the user wants more.""",
+            llm=self.llm,
             verbose=self.verbose
         )
 
@@ -263,10 +278,11 @@ class FREDEconomicCrew:
                     6. If a tool fails 2-3 times, try alternative series IDs or report the issue
                     
                     STEPS:
-                    1. Parse query to identify ALL indicators requested
-                    2. Search FRED for each indicator
-                    3. Retrieve data for each relevant series using fred_data_tool
-                    4. Verify you've retrieved data for EVERY part of the query
+                    1. Use fred_search_tool with a single string query parameter. Example: fred_search_tool("unemployment rate")
+                    2. Find the relevant series ID from the search results
+                    3. Use fred_data_tool with a single string series_id parameter. Example: fred_data_tool("UNRATE")
+                    4. NEVER pass JSON arrays or multiple parameters - ALWAYS use single string arguments
+                    5. Verify you've retrieved data for EVERY part of the query
                     
                     EARLY EXIT CONDITIONS (Stop immediately and report):
                     - If FRED search returns NO results for the query
@@ -293,85 +309,58 @@ class FREDEconomicCrew:
                 Task(
                     description="""Transform the retrieved FRED data into a comprehensive, actionable analysis.
                     
-                    REQUIRED STRUCTURE:
+                    REQUIRED STRUCTURE (BE CONCISE):
                     
                     ## 🏠 INTRODUCTION
-                    - Brief overview of what economic data was analyzed
-                    - Context for why this data matters for the user's query
-                    - Summary of data sources and time periods covered
+                    - User's original request: {text}
+                    - Brief 1-2 sentence summary of what economic data was analyzed
+                    - Data source and time period covered
                     
                     ## 📊 EXECUTIVE SUMMARY
-                    - Bullet points with key findings
+                    - 3-5 bullet points with key findings
                     - Current values and most important changes
                     - One-line historical context (e.g., "highest since 2008")
                     
                     ## 📈 DETAILED DATA ANALYSIS
-                    - Present ALL retrieved data series with full details
-                    - Include complete data tables showing recent values
-                    - For each series, show: Current Value, MoM Change, YoY Change, Percentile Rank
-                    - Include ALL calculated metrics provided (MoM, YoY, percentiles, standard deviations)
-                    - Show recent data points (last 10-15 periods) in organized tables
-                    - Identify trends (increasing/decreasing, acceleration/deceleration)
-                    
-                    ## 📋 RAW DATA SUMMARY
-                    - Complete dataset statistics for each series
-                    - Historical ranges, means, and standard deviations
-                    - Peak and trough values with dates
-                    - Total observations and data coverage periods
+                    - Show current value, changes (MoM/YoY), and percentile rank
+                    - Recent data table (last 10 periods) with VALUES ONLY (exclude N/A)
+                    - Brief trend description
+                    - Historical summary statistics (mean, min, max)
                     
                     ## 🔍 HISTORICAL CONTEXT
-                    - Is this high/low relative to historical norms?
-                    - Compare to relevant historical periods if mentioned
-                    - Explain significance of current percentile rank
-                    - Statistical context (how many standard deviations from mean)
+                    - Is current value high/low relative to historical norms?
+                    - Statistical significance (standard deviations from mean)
                     
                     ## 💡 WHAT THIS MEANS
-                    - Economic implications (growth, inflation, labor market health)
-                    - Policy implications (likely Fed actions, fiscal policy relevance)
-                    - Market implications (investor considerations)
-                    - Business implications (hiring, pricing, investment decisions)
+                    - Economic implications (1-2 sentences)
+                    - Policy implications (1-2 sentences)
+                    - Market implications (1-2 sentences)
                     
                     ## 🔗 FURTHER EXPLORATION
-                    - Direct FRED links for all series mentioned
-                    - 2-3 query-specific related indicators to explore (no generic suggestions)
+                    - Direct FRED link for the series
+                    - 2-3 related indicators to explore
                     
                     CRITICAL REQUIREMENTS:
-                    1. Answer EVERY part of the user's query - if they asked for 3 metrics, analyze all 3
-                    2. Include ALL calculations available in the data
-                    3. Use specific numbers from the actual data retrieved
-                    4. Show the raw data that was retrieved, not just summaries
-                    5. Make insights actionable - tell users what to do with this information
-                    6. Format clearly with sections, bullets, and tables
-                    7. Include comprehensive data tables showing recent values
-                    8. If data retrieval failed, clearly state this and don't fabricate numbers
-                    
-                    SPECIAL HANDLING FOR FAILED RETRIEVALS:
-                    - If NO data was retrieved, provide a clear message:
-                      "Unable to retrieve data for this query. The requested information may not be 
-                      available in FRED, or the query may be outside the scope of economic data."
-                    - Suggest 2-3 alternative valid queries the user could try
-                    - Never provide analysis sections (Executive Summary, etc.) if no data exists
-                    - Be helpful and educational about what FRED data is available
+                    1. NEVER ask follow-up questions - provide a complete, final answer
+                    2. Exclude N/A values from all output - only show calculated metrics with real data
+                    3. Keep INTRODUCTION concise - 2-3 sentences max
+                    4. Use specific numbers from actual data retrieved
+                    5. Make your best interpretation and provide complete analysis
                     
                     FORBIDDEN:
-                    - Never give wall-of-text responses
-                    - Never provide generic boilerplate
-                    - Never skip parts of multi-part queries
-                    - Never report numbers without explaining if they're high/low
-                    - Never forget to format with clear sections
-                    - Never fabricate data if retrieval failed
-                    - Never provide fake analysis when no data exists
-                    - Never omit the raw data that was successfully retrieved""",
-                    expected_output="""Comprehensive economic analysis with:
-                    - Introduction explaining the analysis scope and data sources
-                    - Executive summary with key findings and current values
-                    - Detailed data analysis with complete metrics and recent data tables
-                    - Raw data summary with full dataset statistics
-                    - Historical context with percentile rankings and statistical significance
-                    - Clear interpretation for different stakeholders (economic, policy, market, business)
-                    - Actionable recommendations based on the data
-                    - Query-specific related series suggestions
-                    - Proper formatting with sections, tables, and comprehensive data presentation""",
+                    - Never ask "Would you like me to..."
+                    - Never say "If you'd like, I can..."
+                    - Never include N/A in data tables or output
+                    - Never leave analysis incomplete
+                    - Never provide generic boilerplate""",
+                    expected_output="""Concise economic analysis with:
+                    - Introduction showing user's request and brief analysis overview
+                    - Executive summary with 3-5 key findings
+                    - Detailed data with current values, changes, and recent data table (NO N/A values)
+                    - Historical context with statistical significance
+                    - Brief implications for economy, policy, and markets
+                    - FRED links for further exploration
+                    - Complete final answer with no follow-up questions""",
                     agent=economic_advisor
                 )
             ],
