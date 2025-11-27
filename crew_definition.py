@@ -24,14 +24,33 @@ def fred_search_tool(query: str) -> str:
         fred = Fred(api_key=fred_api_key)
         results = fred.search(query, limit=10)
         
-        if results.empty:
+        # Handle None or empty results
+        if results is None:
+            return f"No results found for query: '{query}' (FRED API returned None)"
+        
+        # Check if results is a DataFrame
+        if not isinstance(results, pd.DataFrame):
+            return f"Error: FRED search returned unexpected data type: {type(results)}. Expected DataFrame."
+        
+        if results.empty or len(results) == 0:
             return f"No results found for query: '{query}'"
         
         output = f"Found {len(results)} series matching '{query}':\n\n"
         for idx, (series_id, row) in enumerate(results.iterrows(), 1):
-            output += f"{idx}. {row.get('title', 'N/A')} (ID: {series_id})\n"
-            output += f"   Description: {row.get('notes', 'No description available')[:200]}...\n"
-            output += f"   Frequency: {row.get('frequency_short', 'N/A')} | Units: {row.get('units_short', 'N/A')}\n\n"
+            # Safely extract values from the row Series
+            title = row.get('title', 'N/A') if pd.notna(row.get('title', None)) else 'N/A'
+            notes = row.get('notes', 'No description available')
+            if pd.isna(notes) or notes is None:
+                notes = 'No description available'
+            else:
+                notes = str(notes)[:200]
+            
+            freq = row.get('frequency_short', 'N/A') if pd.notna(row.get('frequency_short', None)) else 'N/A'
+            units = row.get('units_short', 'N/A') if pd.notna(row.get('units_short', None)) else 'N/A'
+            
+            output += f"{idx}. {title} (ID: {series_id})\n"
+            output += f"   Description: {notes}...\n"
+            output += f"   Frequency: {freq} | Units: {units}\n\n"
         
         return output
     except Exception as e:
@@ -181,17 +200,32 @@ class FREDEconomicCrew:
     A specialized CrewAI crew for querying and analyzing FRED economic data.
     Enhanced with analytical capabilities for comprehensive economic analysis.
     """
-    def __init__(self, verbose=True, logger=None, model=None, temperature=None):
+    def __init__(self, verbose=True, logger=None, model=None):
         self.verbose = verbose
         self.logger = logger or get_logger(__name__)
-        # Configure LLM - support custom model and temperature, default to gpt-5-nano
-        if model:
-            llm_params = {"model": model}
-            if temperature is not None:
-                llm_params["temperature"] = temperature
-            self.llm = LLM(**llm_params)
+        
+        # Check OpenAI API key
+        openai_key = os.getenv("OPENAI_API_KEY")
+        if openai_key:
+            self.logger.info(f"OpenAI API key found: {openai_key[:10]}...{openai_key[-4:] if len(openai_key) > 14 else '***'}")
         else:
-            self.llm = LLM(model="gpt-5-nano")
+            self.logger.warning("OPENAI_API_KEY not found in environment variables!")
+        
+        # Configure LLM - support custom model, default to gpt-5-mini
+        try:
+            if model:
+                self.logger.info(f"Initializing LLM with custom model: {model}")
+                self.llm = LLM(model=model)
+                self.logger.info(f"LLM initialized successfully with model: {model}")
+            else:
+                default_model = "gpt-5-mini"
+                self.logger.info(f"Initializing LLM with default model: {default_model}")
+                self.llm = LLM(model=default_model)
+                self.logger.info(f"LLM initialized successfully with default model: {default_model}")
+        except Exception as e:
+            self.logger.error(f"Failed to initialize LLM: {str(e)}", exc_info=True)
+            raise
+        
         self.crew = self.create_crew()
         self.logger.info("FRED Economic Crew initialized")
 

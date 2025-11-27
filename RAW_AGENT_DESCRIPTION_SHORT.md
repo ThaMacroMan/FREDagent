@@ -44,7 +44,7 @@ The agent uses CrewAI with two specialized agents: a FRED Data Analyst that sear
 |         Field         |                                     Details                                     |
 | :-------------------: | :-----------------------------------------------------------------------------: |
 |  Processing Location  |                         Server-side (user's deployment)                         |
-|       LLMs Used       |                          OpenAI (default: gpt-5-nano)                           |
+|       LLMs Used       |                          OpenAI (default: gpt-5-mini)                           |
 |   Third-Party Tools   |                  FRED API, Masumi Payment Service, OpenAI API                   |
 |      Data Usage       | Queries sent to OpenAI (may be used for training). Economic data from FRED API. |
 |    Data Retention     |           Queries NOT SAVED. Logs kept 12 months (no personal data).            |

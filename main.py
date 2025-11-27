@@ -80,10 +80,26 @@ class ProvideInputRequest(BaseModel):
 async def execute_crew_task(input_data: str) -> str:
     """ Execute a CrewAI task with FRED Economic Data Agents """
     logger.info(f"Starting FRED Economic Data query with input: {input_data}")
-    crew = FREDEconomicCrew(logger=logger)
-    result = crew.crew.kickoff(inputs={"text": input_data})
-    logger.info("FRED Economic Data query completed successfully")
-    return result
+    
+    try:
+        logger.info("Initializing FRED Economic Crew...")
+        crew = FREDEconomicCrew(logger=logger)
+        logger.info("FRED Economic Crew initialized successfully")
+        
+        logger.info("Starting crew execution...")
+        logger.info(f"LLM model being used: {crew.llm.model if hasattr(crew.llm, 'model') else 'Unknown'}")
+        logger.info(f"OpenAI API Key present: {bool(os.getenv('OPENAI_API_KEY'))}")
+        
+        result = crew.crew.kickoff(inputs={"text": input_data})
+        logger.info("FRED Economic Data query completed successfully")
+        return result
+    except Exception as e:
+        logger.error(f"Error during crew execution: {str(e)}", exc_info=True)
+        logger.error(f"Error type: {type(e).__name__}")
+        logger.error(f"OpenAI API Key configured: {bool(os.getenv('OPENAI_API_KEY'))}")
+        if hasattr(e, 'response'):
+            logger.error(f"API Response: {e.response}")
+        raise
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 1) Start Job (MIP-003: /start_job)
